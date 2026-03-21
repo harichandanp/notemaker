@@ -6,6 +6,45 @@
     <title>NoteMaker</title>
     <link rel="stylesheet" href="styles.css">
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script>
+        // Tauri API script for v2
+        (function() {
+            console.log('Setting up Tauri API detection...');
+            
+            // Check if Tauri API is already available
+            if (window.__TAURI__) {
+                console.log('Tauri API found immediately');
+                return;
+            }
+            
+            console.log('Tauri API not found, waiting for injection...');
+            
+            // Poll for Tauri API
+            let attempts = 0;
+            const maxAttempts = 50; // 5 seconds
+            
+            const checkInterval = setInterval(() => {
+                attempts++;
+                
+                if (window.__TAURI__) {
+                    console.log('Tauri API detected after', attempts * 100, 'ms');
+                    clearInterval(checkInterval);
+                    
+                    // Trigger app re-initialization if needed
+                    if (window.noteMakerApp && window.noteMakerApp.needsTauriAPI) {
+                        console.log('Re-initializing app with Tauri API');
+                        window.noteMakerApp = new NoteMaker();
+                    }
+                    return;
+                }
+                
+                if (attempts >= maxAttempts) {
+                    console.warn('Tauri API never detected after', maxAttempts * 100, 'ms');
+                    clearInterval(checkInterval);
+                }
+            }, 100);
+        })();
+    </script>
 </head>
 <body>
     <div class="app">
@@ -13,13 +52,23 @@
             <h1>📝 NoteMaker</h1>
             <div class="controls">
                 <button id="new-note">New Note</button>
+                <button id="new-folder">New Folder</button>
                 <button id="save-note">Save</button>
                 <input type="text" id="search" placeholder="Search notes...">
             </div>
         </header>
         
         <div class="sidebar">
-            <h3>Notes</h3>
+            <div class="browser-header">
+                <button id="nav-up" title="Go to parent directory">&#9650; Up</button>
+                <div id="current-path" class="current-path"></div>
+                <button id="refresh-folders" title="Refresh">Refresh</button>
+            </div>
+            <div id="folders-list" class="browser-list"></div>
+            <div class="notes-header">
+                <h3>Notes</h3>
+                <span id="current-folder"></span>
+            </div>
             <div id="notes-list"></div>
         </div>
         
