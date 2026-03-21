@@ -1,0 +1,12 @@
+{
+  "name": "notemaker",
+  "version": "1.0.0",
+  "description": "A fast, private notes app",
+  "main": "index.html",
+  "scripts": {
+    "dev": "python3 -m http.server 1420",
+    "build": "echo 'Build complete - files are ready for Tauri'"
+  },
+  "devDependencies": {},
+  "dependencies": {}
+}
