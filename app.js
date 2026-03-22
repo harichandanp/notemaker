@@ -192,7 +192,9 @@ class NoteMaker {
         const renderer = new marked.Renderer();
 
         // Syntax highlighting for code blocks
-        renderer.code = (code, lang) => {
+        renderer.code = (token) => {
+            const code = token.text || '';
+            const lang = token.lang || '';
             const language = (typeof hljs !== 'undefined' && hljs.getLanguage(lang)) ? lang : 'plaintext';
             const highlighted = typeof hljs !== 'undefined'
                 ? hljs.highlight(code, { language }).value
@@ -202,7 +204,10 @@ class NoteMaker {
 
         // Task list items with stable indexes for interactive checkboxes
         let checkboxIndex = 0;
-        renderer.listitem = (text, task, checked) => {
+        renderer.listitem = (token) => {
+            const text = token.text || '';
+            const task = token.task;
+            const checked = token.checked;
             if (task) {
                 const idx = checkboxIndex++;
                 return `<li class="task-item"><input type="checkbox" class="task-checkbox" data-idx="${idx}" ${checked ? 'checked' : ''}>${text}</li>`;
@@ -211,7 +216,9 @@ class NoteMaker {
         };
 
         // Headings with IDs for outline scroll targets
-        renderer.heading = (text, level) => {
+        renderer.heading = (token) => {
+            const text = token.text || '';
+            const level = token.depth || 1;
             const slug = text.toLowerCase().replace(/[^\w]+/g, '-');
             return `<h${level} id="h-${slug}">${text}</h${level}>`;
         };
