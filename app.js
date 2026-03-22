@@ -164,6 +164,7 @@ class NoteMaker {
         this.notesDirectory = '';   // root notes directory
         this.isSaving = false;
         this.lastSaveTime = null;
+        this.activeTagFilter = null;
         this.init();
     }
 
@@ -177,6 +178,7 @@ class NoteMaker {
         await this.browseDirectory(this.currentDir);
         await this.loadNotesForDir();
         this.renderNotesList();
+        this.renderTagsPanel();
         this.updateStatusBar();
         console.log('NoteMaker initialized successfully');
 
@@ -202,6 +204,12 @@ class NoteMaker {
         this.charCount = document.getElementById('char-count');
         this.saveStatus = document.getElementById('save-status');
         this.saveText = document.getElementById('save-text');
+        this.tagBar = document.getElementById('tag-bar');
+        this.tagChips = document.getElementById('tag-chips');
+        this.tagInput = document.getElementById('tag-input');
+        this.tagsSection = document.getElementById('tags-section');
+        this.tagsFilterList = document.getElementById('tags-filter-list');
+        this.clearTagFilterBtn = document.getElementById('clear-tag-filter');
     }
 
     setupEventListeners() {
@@ -242,6 +250,31 @@ class NoteMaker {
             this.searchInput.addEventListener('input', () => this.filterNotes());
             this.searchInput.addEventListener('keydown', (e) => {
                 if (e.key === 'Escape') this.editor.focus();
+            });
+        }
+
+        if (this.tagInput) {
+            this.tagInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ',') {
+                    e.preventDefault();
+                    const val = this.tagInput.value.trim().replace(/,/g, '');
+                    if (val) this.addTag(val);
+                }
+                if (e.key === 'Backspace' && !this.tagInput.value && this.currentNote?.tags?.length) {
+                    this.removeTag(this.currentNote.tags[this.currentNote.tags.length - 1]);
+                }
+            });
+            this.tagInput.addEventListener('blur', () => {
+                const val = this.tagInput.value.trim().replace(/,/g, '');
+                if (val) this.addTag(val);
+            });
+        }
+
+        if (this.clearTagFilterBtn) {
+            this.clearTagFilterBtn.addEventListener('click', () => {
+                this.activeTagFilter = null;
+                this.renderTagsPanel();
+                this.filterNotes();
             });
         }
 
@@ -340,6 +373,8 @@ class NoteMaker {
             console.error('Failed to load notes:', error);
             this.notes = [];
         }
+        this.activeTagFilter = null;
+        this.renderTagsPanel();
     }
 
     renderBrowser() {
@@ -480,6 +515,7 @@ class NoteMaker {
             title: 'New Note',
             content: '',
             folder: this.getRelativePath(this.currentDir) || null,
+            tags: [],
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
         };
@@ -498,7 +534,8 @@ class NoteMaker {
         this.updatePreview();
         this.updateStatusBar();
         this.setSaveStatus('saved');
-        
+        this.renderTagBar();
+
         // Update active state in UI
         document.querySelectorAll('.note-item').forEach(item => {
             item.classList.remove('active');
@@ -705,42 +742,63 @@ class NoteMaker {
 
     filterNotes() {
         const query = this.searchInput.value.toLowerCase();
-        const filteredNotes = query 
-            ? this.notes.filter(note => 
-                note.title.toLowerCase().includes(query) || 
-                note.content.toLowerCase().includes(query)
-              )
-            : this.notes;
-        
-        this.renderNotesList(filteredNotes);
+        let filtered = this.notes;
+
+        if (this.activeTagFilter) {
+            filtered = filtered.filter(note => note.tags?.includes(this.activeTagFilter));
+        }
+
+        if (query) {
+            filtered = filtered.filter(note =>
+                note.title.toLowerCase().includes(query) ||
+                note.content.toLowerCase().includes(query) ||
+                note.tags?.some(t => t.toLowerCase().includes(query))
+            );
+        }
+
+        this.renderNotesList(filtered);
     }
 
     renderNotesList(notesToRender = this.notes) {
         this.notesList.innerHTML = '';
-        
+
         notesToRender.forEach((note, index) => {
             const noteElement = document.createElement('div');
             noteElement.className = 'note-item';
             noteElement.dataset.noteId = note.id;
-            
-            // Stagger animation
             noteElement.style.animationDelay = `${index * 50}ms`;
-            
+
+            // Top row: title + date
+            const topRow = document.createElement('div');
+            topRow.className = 'note-item-top';
+
             const titleDiv = document.createElement('div');
-            titleDiv.style.flex = '1';
+            titleDiv.className = 'note-item-title';
             titleDiv.textContent = note.title;
-            
+
             const dateDiv = document.createElement('div');
-            dateDiv.style.fontSize = '0.75rem';
-            dateDiv.style.color = 'var(--color-text-muted)';
+            dateDiv.className = 'note-item-date';
             dateDiv.textContent = this.formatDate(note.updated_at);
-            
-            noteElement.appendChild(titleDiv);
-            noteElement.appendChild(dateDiv);
+
+            topRow.appendChild(titleDiv);
+            topRow.appendChild(dateDiv);
+            noteElement.appendChild(topRow);
+
+            // Tags row (only if note has tags)
+            if (note.tags?.length) {
+                const tagsRow = document.createElement('div');
+                tagsRow.className = 'note-item-tags';
+                note.tags.forEach(tag => {
+                    const chip = document.createElement('span');
+                    chip.className = 'note-tag-chip';
+                    chip.textContent = tag;
+                    tagsRow.appendChild(chip);
+                });
+                noteElement.appendChild(tagsRow);
+            }
 
             noteElement.addEventListener('click', () => this.selectNoteWithAnimation(note));
 
-            // Right-click context menu
             noteElement.addEventListener('contextmenu', (e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -751,11 +809,10 @@ class NoteMaker {
                     { icon: ICONS.delete, label: 'Delete', danger: true, action: () => this.deleteNote(note.id) },
                 ]);
             });
-            
+
             this.notesList.appendChild(noteElement);
         });
-        
-        // Re-select current note if it exists
+
         if (this.currentNote) {
             document.querySelector(`[data-note-id="${this.currentNote.id}"]`)?.classList.add('active');
         }
@@ -781,6 +838,96 @@ class NoteMaker {
         const markdown = this.editor.value;
         const html = marked.parse(markdown);
         this.preview.innerHTML = html;
+    }
+
+    // ===== Tags =====
+
+    collectAllTags() {
+        const set = new Set();
+        this.notes.forEach(note => note.tags?.forEach(t => set.add(t)));
+        return [...set].sort();
+    }
+
+    renderTagBar() {
+        if (!this.tagChips || !this.tagInput) return;
+        this.tagChips.innerHTML = '';
+        const tags = this.currentNote?.tags || [];
+        tags.forEach(tag => {
+            const chip = document.createElement('span');
+            chip.className = 'tag-chip';
+
+            const label = document.createElement('span');
+            label.textContent = tag;
+
+            const removeBtn = document.createElement('button');
+            removeBtn.className = 'tag-remove';
+            removeBtn.innerHTML = '×';
+            removeBtn.title = `Remove tag "${tag}"`;
+            removeBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.removeTag(tag);
+            });
+
+            chip.appendChild(label);
+            chip.appendChild(removeBtn);
+            this.tagChips.appendChild(chip);
+        });
+        this.tagInput.value = '';
+        this.tagInput.disabled = !this.currentNote;
+        this.tagInput.placeholder = this.currentNote ? 'Add tag…' : '';
+    }
+
+    renderTagsPanel() {
+        if (!this.tagsFilterList || !this.tagsSection) return;
+        const allTags = this.collectAllTags();
+
+        if (allTags.length === 0) {
+            this.tagsSection.style.display = 'none';
+            return;
+        }
+
+        this.tagsSection.style.display = '';
+        this.tagsFilterList.innerHTML = '';
+
+        allTags.forEach(tag => {
+            const chip = document.createElement('span');
+            chip.className = 'tags-filter-chip' + (this.activeTagFilter === tag ? ' active' : '');
+            chip.textContent = tag;
+            chip.addEventListener('click', () => {
+                this.activeTagFilter = this.activeTagFilter === tag ? null : tag;
+                this.renderTagsPanel();
+                this.filterNotes();
+            });
+            this.tagsFilterList.appendChild(chip);
+        });
+
+        if (this.clearTagFilterBtn) {
+            this.clearTagFilterBtn.style.display = this.activeTagFilter ? '' : 'none';
+        }
+    }
+
+    async addTag(tag) {
+        if (!this.currentNote) return;
+        const normalized = tag.trim().toLowerCase().replace(/\s+/g, '-');
+        if (!normalized) return;
+        if (!this.currentNote.tags) this.currentNote.tags = [];
+        if (this.currentNote.tags.includes(normalized)) {
+            this.tagInput.value = '';
+            return;
+        }
+        this.currentNote.tags.push(normalized);
+        this.tagInput.value = '';
+        this.renderTagBar();
+        await this.saveCurrentNote();
+        this.renderTagsPanel();
+    }
+
+    async removeTag(tag) {
+        if (!this.currentNote?.tags) return;
+        this.currentNote.tags = this.currentNote.tags.filter(t => t !== tag);
+        this.renderTagBar();
+        await this.saveCurrentNote();
+        this.renderTagsPanel();
     }
 }
 
