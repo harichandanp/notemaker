@@ -5,9 +5,19 @@ A fast, private, native Mac notes app built with Rust + Tauri. Features a split-
 ## 🚀 Features
 
 - **Split-pane markdown editor** with live preview
+- **Hierarchical folder organization** - create, rename, delete folders and navigate between them
 - **Local-first storage** - all notes saved as JSON files in `~/Documents/NoteMaker/`
-- **Auto-save** every 2 seconds
-- **Instant search** across all notes
+- **Auto-save** every 2 seconds with visual status indicator
+- **Instant search** across all notes, titles, and tags
+- **Tag system** - add tags to notes and filter by tags
+- **Wikilinks support** - link between notes using `[[Note Title]]` syntax
+- **Backlinks panel** - see which notes link to the current note
+- **Interactive task lists** - click checkboxes in preview to toggle tasks
+- **Document outline** - navigate headings with the outline panel
+- **Syntax highlighting** for code blocks using highlight.js
+- **Context menus** - right-click notes and folders for actions
+- **Note management** - rename, duplicate, and delete notes
+- **Keyboard shortcuts** - Cmd+N (new note), Cmd+S (save), Cmd+F (search), etc.
 - **Native Mac app** - fast startup, system integration
 - **Privacy-focused** - no servers, no tracking, no cloud dependencies
 - **Easy sync** - notes are just files, sync with any cloud service
@@ -18,6 +28,9 @@ A fast, private, native Mac notes app built with Rust + Tauri. Features a split-
 - **Frontend**: HTML + CSS + JavaScript (no heavy frameworks)
 - **Storage**: Local file system (JSON files)
 - **Markdown**: Marked.js for parsing
+- **Syntax Highlighting**: highlight.js
+- **Icons**: Custom SVG icons
+- **Fonts**: Inter (sans-serif) + JetBrains Mono (monospace)
 
 ## 📋 Development Setup
 
@@ -97,6 +110,8 @@ Notes are stored as individual JSON files in `~/Documents/NoteMaker/`:
   "id": "1640995200000",
   "title": "My Note Title",
   "content": "# My Note\n\nThis is the markdown content...",
+  "folder": "projects/important",
+  "tags": ["work", "urgent"],
   "created_at": "2024-01-01T00:00:00Z",
   "updated_at": "2024-01-01T00:00:00Z"
 }
@@ -126,6 +141,12 @@ This makes it easy to:
        save_note,
        delete_note,
        get_notes_directory,
+       list_directory,
+       create_folder,
+       rename_note,
+       duplicate_note,
+       rename_directory,
+       delete_directory,
        my_new_function  // Add here
    ])
    ```
@@ -141,11 +162,73 @@ This makes it easy to:
 
 ### Styling Changes
 
-Edit `styles.css` - it uses standard CSS with flexbox for layout.
+Edit `styles.css` - it uses CSS custom properties for theming and flexbox for layout.
 
 ### UI Changes
 
 Edit `index.html` and `app.js` - vanilla JavaScript with DOM manipulation.
+
+## ⌨️ Keyboard Shortcuts
+
+- **Cmd+N** - Create new note
+- **Cmd+Shift+N** - Create new folder
+- **Cmd+S** - Save current note
+- **Cmd+F** - Focus search
+- **Cmd+Shift+F** - Clear search
+- **Escape** - Focus editor
+
+## � Markdown Features
+
+NoteMaker supports extended markdown with these features:
+
+- **Standard Markdown**: Headings, lists, links, images, code blocks
+- **Task Lists**: Interactive checkboxes with `- [ ]` and `- [x]`
+- **Wikilinks**: Link between notes using `[[Note Title]]` or `[[Note Title|Alias]]`
+- **Syntax Highlighting**: Code blocks with language specification
+- **Auto-generated IDs**: Headings get IDs for anchor links
+- **Backlinks**: Automatic detection of notes linking to current note
+
+### Wikilink Examples
+
+```markdown
+# My Project Notes
+
+This is related to my [[Project Planning]] notes.
+
+See also [[Research|My Research Notes]] for more details.
+
+- [ ] Review [[Meeting Notes]] from yesterday
+- [x] Updated [[Project Timeline]]
+```
+
+## 🏷️ Tag System
+
+Organize notes with tags:
+
+1. Add tags using the tag input above the editor
+2. Tags are automatically normalized (lowercase, hyphens for spaces)
+3. Filter notes by clicking tags in the sidebar
+4. Search includes tag content
+
+### Tag Examples
+
+```markdown
+# Important Meeting
+
+Tags: work, urgent, team-meeting
+
+Action items from the quarterly review...
+```
+
+## 📂 Folder Organization
+
+Create hierarchical folder structure:
+
+- Use **Cmd+Shift+N** or click "New Folder"
+- Right-click folders to rename or delete
+- Navigate with the folder browser in the sidebar
+- Notes inherit their folder location
+- Move notes between folders via backend commands
 
 ## 🚀 Building for Distribution
 
@@ -198,13 +281,16 @@ MIT License - feel free to modify and distribute.
 
 ## 🎯 Future Enhancements
 
-- [ ] Tags and folders for organization
 - [ ] Dark mode theme
 - [ ] Export to PDF/HTML
-- [ ] Keyboard shortcuts
 - [ ] Split view for multiple notes
 - [ ] Math equation support (KaTeX)
 - [ ] Diagram support (Mermaid)
+- [ ] Note templates
+- [ ] Full-text search with highlighting
+- [ ] Note pinning/favorites
+- [ ] Advanced search filters
+- [ ] Import from other note apps
 
 ---
 
