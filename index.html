@@ -7,8 +7,10 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
-    <link rel="stylesheet" href="styles.css?v=2">
+    <link rel="stylesheet" href="styles.css?v=3">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11/styles/github.min.css" id="hljs-theme">
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11/lib/highlight.min.js"></script>
     <script>
         // Tauri API script for v2
         (function() {
@@ -74,6 +76,12 @@
                     </button>
                 </div>
                 <div id="folders-list" class="browser-list"></div>
+                <div id="backlinks-section" class="backlinks-section" style="display:none;">
+                    <div class="backlinks-header">
+                        <span class="backlinks-label">Backlinks</span>
+                    </div>
+                    <div id="backlinks-list" class="backlinks-list"></div>
+                </div>
                 <div id="tags-section" class="tags-filter-section" style="display:none;">
                     <div class="tags-filter-header">
                         <span class="tags-filter-label">Tags</span>
@@ -100,6 +108,10 @@
                 </div>
                 <div class="preview-pane">
                     <div id="preview"></div>
+                    <div id="outline-panel" class="outline-panel" style="display:none;">
+                        <div class="outline-title">Outline</div>
+                        <div id="outline-list" class="outline-list"></div>
+                    </div>
                 </div>
             </main>
         </div>
