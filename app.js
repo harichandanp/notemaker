@@ -79,6 +79,82 @@ function tauriPrompt(message, placeholder = '') {
     });
 }
 
+// ===== Context Menu =====
+function showContextMenu(e, items) {
+    // Remove any existing context menu
+    document.querySelectorAll('.context-menu').forEach(m => m.remove());
+
+    const menu = document.createElement('div');
+    menu.className = 'context-menu';
+
+    items.forEach(item => {
+        if (item.separator) {
+            const sep = document.createElement('div');
+            sep.className = 'context-menu-separator';
+            menu.appendChild(sep);
+            return;
+        }
+
+        const el = document.createElement('div');
+        el.className = 'context-menu-item' + (item.danger ? ' danger' : '');
+
+        const icon = document.createElement('span');
+        icon.className = 'context-menu-item-icon';
+        icon.innerHTML = item.icon || '';
+
+        const label = document.createElement('span');
+        label.textContent = item.label;
+
+        el.appendChild(icon);
+        el.appendChild(label);
+        el.addEventListener('click', () => {
+            menu.remove();
+            item.action();
+        });
+        menu.appendChild(el);
+    });
+
+    document.body.appendChild(menu);
+
+    // Position: ensure menu stays within viewport
+    const rect = menu.getBoundingClientRect();
+    let x = e.clientX;
+    let y = e.clientY;
+    if (x + rect.width > window.innerWidth) x = window.innerWidth - rect.width - 8;
+    if (y + rect.height > window.innerHeight) y = window.innerHeight - rect.height - 8;
+    menu.style.left = x + 'px';
+    menu.style.top = y + 'px';
+
+    // Close on click outside or Escape
+    const close = (ev) => {
+        if (!menu.contains(ev.target)) {
+            menu.remove();
+            document.removeEventListener('click', close);
+            document.removeEventListener('contextmenu', close);
+        }
+    };
+    const closeEsc = (ev) => {
+        if (ev.key === 'Escape') {
+            menu.remove();
+            document.removeEventListener('keydown', closeEsc);
+        }
+    };
+    // Delay so this click doesn't close it immediately
+    setTimeout(() => {
+        document.addEventListener('click', close);
+        document.addEventListener('contextmenu', close);
+        document.addEventListener('keydown', closeEsc);
+    }, 0);
+}
+
+// SVG icon helpers
+const ICONS = {
+    rename: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>',
+    duplicate: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
+    delete: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>',
+    folder: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>',
+};
+
 class NoteMaker {
     constructor() {
         this.notes = [];
@@ -99,7 +175,7 @@ class NoteMaker {
         await this.loadNotesDirectory();
         this.currentDir = this.notesDirectory;
         await this.browseDirectory(this.currentDir);
-        await this.loadNotes();
+        await this.loadNotesForDir();
         this.renderNotesList();
         this.updateStatusBar();
         console.log('NoteMaker initialized successfully');
@@ -312,6 +388,18 @@ class NoteMaker {
             item.appendChild(name);
 
             item.addEventListener('click', () => this.browseDirectory(entry.path));
+
+            // Right-click context menu for directories
+            item.addEventListener('contextmenu', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                showContextMenu(e, [
+                    { icon: ICONS.rename, label: 'Rename', action: () => this.renameDirectory(entry.path, entry.name) },
+                    { separator: true },
+                    { icon: ICONS.delete, label: 'Delete', danger: true, action: () => this.deleteDirectory(entry.path, entry.name) },
+                ]);
+            });
+
             this.foldersList.appendChild(item);
         }
 
@@ -537,6 +625,84 @@ class NoteMaker {
         }
     }
 
+    async renameNote(noteId) {
+        const note = this.notes.find(n => n.id === noteId);
+        if (!note) return;
+
+        const newTitle = await tauriPrompt('Rename note:', note.title);
+        if (!newTitle || !newTitle.trim() || newTitle.trim() === note.title) return;
+
+        try {
+            const invoke = getTauriInvoke();
+            if (invoke) {
+                const updated = await invoke('rename_note', { noteId, newTitle: newTitle.trim() });
+                note.title = updated.title;
+                note.updated_at = updated.updated_at;
+            } else {
+                note.title = newTitle.trim();
+            }
+            if (this.currentNote?.id === noteId) {
+                this.currentNote.title = note.title;
+            }
+            this.renderNotesList();
+        } catch (error) {
+            console.error('Failed to rename note:', error);
+            await tauriMessage('Failed to rename note: ' + error);
+        }
+    }
+
+    async duplicateNote(noteId) {
+        try {
+            const invoke = getTauriInvoke();
+            if (invoke) {
+                const newNote = await invoke('duplicate_note', { noteId });
+                this.notes.unshift(newNote);
+            } else {
+                const original = this.notes.find(n => n.id === noteId);
+                if (!original) return;
+                const dup = { ...original, id: Date.now().toString(), title: original.title + ' (copy)', created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+                this.notes.unshift(dup);
+            }
+            this.renderNotesList();
+            this.browseDirectory(this.currentDir);
+        } catch (error) {
+            console.error('Failed to duplicate note:', error);
+            await tauriMessage('Failed to duplicate note: ' + error);
+        }
+    }
+
+    async renameDirectory(dirPath, dirName) {
+        const newName = await tauriPrompt('Rename folder:', dirName);
+        if (!newName || !newName.trim() || newName.trim() === dirName) return;
+
+        try {
+            const invoke = getTauriInvoke();
+            if (invoke) {
+                await invoke('rename_directory', { path: dirPath, newName: newName.trim() });
+            }
+            this.browseDirectory(this.currentDir);
+        } catch (error) {
+            console.error('Failed to rename directory:', error);
+            await tauriMessage('Failed to rename folder: ' + error);
+        }
+    }
+
+    async deleteDirectory(dirPath, dirName) {
+        const confirmed = await tauriAsk(`Delete folder "${dirName}" and all its contents?`);
+        if (!confirmed) return;
+
+        try {
+            const invoke = getTauriInvoke();
+            if (invoke) {
+                await invoke('delete_directory', { path: dirPath });
+            }
+            this.browseDirectory(this.currentDir);
+        } catch (error) {
+            console.error('Failed to delete directory:', error);
+            await tauriMessage('Failed to delete folder: ' + error);
+        }
+    }
+
     filterNotes() {
         const query = this.searchInput.value.toLowerCase();
         const filteredNotes = query 
@@ -569,42 +735,21 @@ class NoteMaker {
             dateDiv.style.color = 'var(--color-text-muted)';
             dateDiv.textContent = this.formatDate(note.updated_at);
             
-            const deleteBtn = document.createElement('button');
-            deleteBtn.innerHTML = '🗑️';
-            deleteBtn.style.cssText = `
-                background: none;
-                border: none;
-                cursor: pointer;
-                padding: 0.25rem;
-                border-radius: 0.25rem;
-                opacity: 0.6;
-                transition: opacity 0.2s;
-            `;
-            deleteBtn.title = 'Delete note';
-            
-            deleteBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                this.deleteNote(note.id);
-            });
-            
-            deleteBtn.addEventListener('mouseenter', () => {
-                deleteBtn.style.opacity = '1';
-            });
-            
-            deleteBtn.addEventListener('mouseleave', () => {
-                deleteBtn.style.opacity = '0.6';
-            });
-            
             noteElement.appendChild(titleDiv);
             noteElement.appendChild(dateDiv);
-            noteElement.appendChild(deleteBtn);
-            
+
             noteElement.addEventListener('click', () => this.selectNoteWithAnimation(note));
-            
-            // Right-click to delete (fallback)
+
+            // Right-click context menu
             noteElement.addEventListener('contextmenu', (e) => {
                 e.preventDefault();
-                this.deleteNote(note.id);
+                e.stopPropagation();
+                showContextMenu(e, [
+                    { icon: ICONS.rename, label: 'Rename', action: () => this.renameNote(note.id) },
+                    { icon: ICONS.duplicate, label: 'Duplicate', action: () => this.duplicateNote(note.id) },
+                    { separator: true },
+                    { icon: ICONS.delete, label: 'Delete', danger: true, action: () => this.deleteNote(note.id) },
+                ]);
             });
             
             this.notesList.appendChild(noteElement);

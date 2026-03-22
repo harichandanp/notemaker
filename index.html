@@ -4,7 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>NoteMaker</title>
-    <link rel="stylesheet" href="styles.css">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <link rel="stylesheet" href="styles.css?v=2">
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script>
         // Tauri API script for v2
@@ -58,28 +61,37 @@
             </div>
         </header>
         
-        <div class="sidebar">
-            <div class="browser-header">
-                <button id="nav-up" title="Go to parent directory">&#9650; Up</button>
-                <div id="current-path" class="current-path"></div>
-                <button id="refresh-folders" title="Refresh">Refresh</button>
-            </div>
-            <div id="folders-list" class="browser-list"></div>
-            <div class="notes-header">
-                <h3>Notes</h3>
-                <span id="current-folder"></span>
-            </div>
-            <div id="notes-list"></div>
+        <div class="content-row">
+            <aside class="sidebar">
+                <div class="browser-header">
+                    <button id="nav-up" title="Go to parent directory">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+                        Back
+                    </button>
+                    <div id="current-path" class="current-path"></div>
+                    <button id="refresh-folders" title="Refresh">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                    </button>
+                </div>
+                <div id="folders-list" class="browser-list"></div>
+                <div class="notes-section">
+                    <div class="notes-header">
+                        <h3>Notes</h3>
+                        <span id="current-folder"></span>
+                    </div>
+                    <div id="notes-list"></div>
+                </div>
+            </aside>
+
+            <main class="editor-container">
+                <div class="editor-pane">
+                    <textarea id="editor" placeholder="Start typing in markdown..."></textarea>
+                </div>
+                <div class="preview-pane">
+                    <div id="preview"></div>
+                </div>
+            </main>
         </div>
-        
-        <main class="editor-container">
-            <div class="editor-pane">
-                <textarea id="editor" placeholder="Start typing in markdown..."></textarea>
-            </div>
-            <div class="preview-pane">
-                <div id="preview"></div>
-            </div>
-        </main>
         
         <footer class="status-bar">
             <div class="status-left">
@@ -99,6 +111,14 @@
         </footer>
     </div>
     
-    <script src="app.js"></script>
+    <script src="app.js?v=2"></script>
+    <script>
+        // Suppress native context menu globally so custom menus work in WKWebView
+        document.addEventListener('contextmenu', function(e) {
+            // Allow native context menu only in the editor textarea
+            if (e.target.id === 'editor') return;
+            e.preventDefault();
+        }, true);
+    </script>
 </body>
 </html>
