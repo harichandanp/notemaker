@@ -409,6 +409,7 @@ async fn duplicate_note(note_id: String, state: tauri::State<'_, AppState>) -> R
         title: format!("{} (copy)", original.title),
         content: original.content.clone(),
         folder: original.folder.clone(),
+        tags: original.tags.clone(),
         created_at: now,
         updated_at: now,
     };
