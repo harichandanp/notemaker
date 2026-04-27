@@ -4,23 +4,25 @@
   "version": "0.1.0",
   "identifier": "com.tauri.dev",
   "build": {
-    "frontendDist": "../dist",
+    "frontendDist": "../",
     "devUrl": "http://localhost:1420",
-    "beforeDevCommand": "npm run dev",
-    "beforeBuildCommand": "npm run build"
+    "beforeDevCommand": "python3 -m http.server 1420",
+    "beforeBuildCommand": ""
   },
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "NoteMaker",
         "width": 1200,
         "height": 800,
-        "resizable": true,
-        "fullscreen": false,
         "minWidth": 800,
-        "minHeight": 600
+        "minHeight": 600,
+        "resizable": true,
+        "fullscreen": false
       }
     ],
+    "withGlobalTauri": true,
     "security": {
       "csp": null
     }
