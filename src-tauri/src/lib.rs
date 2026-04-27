@@ -334,6 +334,127 @@ async fn move_note(note_id: String, new_folder: Option<String>, state: tauri::St
 }
 
 #[tauri::command]
+async fn rename_note(note_id: String, new_title: String, state: tauri::State<'_, AppState>) -> Result<Note, String> {
+    fn find_note_path(dir: &Path, note_id: &str) -> Option<PathBuf> {
+        if let Ok(entries) = fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    if let Some(found) = find_note_path(&path, note_id) {
+                        return Some(found);
+                    }
+                } else if path.file_name().map_or(false, |name| name.to_string_lossy() == format!("{}.json", note_id)) {
+                    return Some(path);
+                }
+            }
+        }
+        None
+    }
+
+    let note_path = find_note_path(&state.notes_dir, &note_id)
+        .ok_or("Note not found".to_string())?;
+
+    let content = fs::read_to_string(&note_path)
+        .map_err(|e| format!("Failed to read note: {}", e))?;
+
+    let mut note: Note = serde_json::from_str(&content)
+        .map_err(|e| format!("Failed to parse note: {}", e))?;
+
+    note.title = new_title;
+    note.updated_at = Utc::now();
+
+    let json = serde_json::to_string_pretty(&note)
+        .map_err(|e| format!("Failed to serialize note: {}", e))?;
+
+    fs::write(&note_path, json)
+        .map_err(|e| format!("Failed to write note: {}", e))?;
+
+    Ok(note)
+}
+
+#[tauri::command]
+async fn duplicate_note(note_id: String, state: tauri::State<'_, AppState>) -> Result<Note, String> {
+    fn find_note_path(dir: &Path, note_id: &str) -> Option<PathBuf> {
+        if let Ok(entries) = fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    if let Some(found) = find_note_path(&path, note_id) {
+                        return Some(found);
+                    }
+                } else if path.file_name().map_or(false, |name| name.to_string_lossy() == format!("{}.json", note_id)) {
+                    return Some(path);
+                }
+            }
+        }
+        None
+    }
+
+    let note_path = find_note_path(&state.notes_dir, &note_id)
+        .ok_or("Note not found".to_string())?;
+
+    let content = fs::read_to_string(&note_path)
+        .map_err(|e| format!("Failed to read note: {}", e))?;
+
+    let original: Note = serde_json::from_str(&content)
+        .map_err(|e| format!("Failed to parse note: {}", e))?;
+
+    let now = Utc::now();
+    let new_id = now.timestamp_millis().to_string();
+
+    let new_note = Note {
+        id: new_id.clone(),
+        title: format!("{} (copy)", original.title),
+        content: original.content.clone(),
+        folder: original.folder.clone(),
+        created_at: now,
+        updated_at: now,
+    };
+
+    let new_path = note_path.parent().unwrap().join(format!("{}.json", new_id));
+    let json = serde_json::to_string_pretty(&new_note)
+        .map_err(|e| format!("Failed to serialize note: {}", e))?;
+
+    fs::write(&new_path, json)
+        .map_err(|e| format!("Failed to write note: {}", e))?;
+
+    Ok(new_note)
+}
+
+#[tauri::command]
+async fn rename_directory(path: String, new_name: String) -> Result<String, String> {
+    let dir = PathBuf::from(&path);
+    if !dir.exists() || !dir.is_dir() {
+        return Err("Directory not found".to_string());
+    }
+
+    let parent = dir.parent().ok_or("Cannot rename root")?;
+    let new_path = parent.join(&new_name);
+
+    if new_path.exists() {
+        return Err(format!("A folder named '{}' already exists", new_name));
+    }
+
+    fs::rename(&dir, &new_path)
+        .map_err(|e| format!("Failed to rename directory: {}", e))?;
+
+    Ok(new_path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+async fn delete_directory(path: String) -> Result<(), String> {
+    let dir = PathBuf::from(&path);
+    if !dir.exists() || !dir.is_dir() {
+        return Err("Directory not found".to_string());
+    }
+
+    fs::remove_dir_all(&dir)
+        .map_err(|e| format!("Failed to delete directory: {}", e))?;
+
+    Ok(())
+}
+
+#[tauri::command]
 async fn delete_note(note_id: String, state: tauri::State<'_, AppState>) -> Result<(), String> {
     fn find_and_delete_note(dir: &Path, note_id: &str) -> Result<bool, std::io::Error> {
         if dir.exists() && dir.is_dir() {
@@ -377,13 +498,13 @@ pub fn run() {
       let home_dir = dirs::home_dir().expect("Could not find home directory");
       let notes_dir = home_dir.join("Documents").join("NoteMaker");
       fs::create_dir_all(&notes_dir).expect("Could not create notes directory");
-      
+
       let app_state = AppState {
         notes_dir,
       };
-      
+
       app.manage(app_state);
-      
+
       Ok(())
     })
     .invoke_handler(tauri::generate_handler![
@@ -395,6 +516,10 @@ pub fn run() {
         get_notes,
         save_note,
         move_note,
+        rename_note,
+        duplicate_note,
+        rename_directory,
+        delete_directory,
         delete_note
     ])
     .run(tauri::generate_context!())
