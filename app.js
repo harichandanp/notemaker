@@ -171,6 +171,7 @@ class NoteMaker {
     async init() {
         console.log('NoteMaker initializing...');
         this.setupElements();
+        this.configureMarked();
         this.setupEventListeners();
         this.setupKeyboardShortcuts();
         await this.loadNotesDirectory();
@@ -185,6 +186,39 @@ class NoteMaker {
         if (this.notes.length === 0) {
             this.createNewNote();
         }
+    }
+
+    configureMarked() {
+        const renderer = new marked.Renderer();
+
+        // Syntax highlighting for code blocks
+        renderer.code = (code, lang) => {
+            const language = (typeof hljs !== 'undefined' && hljs.getLanguage(lang)) ? lang : 'plaintext';
+            const highlighted = typeof hljs !== 'undefined'
+                ? hljs.highlight(code, { language }).value
+                : code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            return `<pre><code class="hljs language-${language}">${highlighted}</code></pre>`;
+        };
+
+        // Task list items with stable indexes for interactive checkboxes
+        let checkboxIndex = 0;
+        renderer.listitem = (text, task, checked) => {
+            if (task) {
+                const idx = checkboxIndex++;
+                return `<li class="task-item"><input type="checkbox" class="task-checkbox" data-idx="${idx}" ${checked ? 'checked' : ''}>${text}</li>`;
+            }
+            return `<li>${text}</li>`;
+        };
+
+        // Headings with IDs for outline scroll targets
+        renderer.heading = (text, level) => {
+            const slug = text.toLowerCase().replace(/[^\w]+/g, '-');
+            return `<h${level} id="h-${slug}">${text}</h${level}>`;
+        };
+
+        marked.use({ renderer });
+        // Expose a reset function to zero out the checkbox counter before each render
+        this._resetCheckboxIndex = () => { checkboxIndex = 0; };
     }
 
     setupElements() {
@@ -210,6 +244,10 @@ class NoteMaker {
         this.tagsSection = document.getElementById('tags-section');
         this.tagsFilterList = document.getElementById('tags-filter-list');
         this.clearTagFilterBtn = document.getElementById('clear-tag-filter');
+        this.backlinksSection = document.getElementById('backlinks-section');
+        this.backlinksList = document.getElementById('backlinks-list');
+        this.outlinePanel = document.getElementById('outline-panel');
+        this.outlineList = document.getElementById('outline-list');
     }
 
     setupEventListeners() {
@@ -277,6 +315,16 @@ class NoteMaker {
                 this.filterNotes();
             });
         }
+
+        // Event delegation for preview: wikilinks + interactive checkboxes
+        this.preview.addEventListener('click', (e) => {
+            if (e.target.classList.contains('wikilink')) {
+                this.navigateToWikilink(e.target.dataset.target);
+            }
+            if (e.target.classList.contains('task-checkbox')) {
+                this.toggleCheckbox(parseInt(e.target.dataset.idx, 10));
+            }
+        });
 
         setInterval(() => this.autoSave(), 2000);
     }
@@ -375,6 +423,7 @@ class NoteMaker {
         }
         this.activeTagFilter = null;
         this.renderTagsPanel();
+        if (this.backlinksSection) this.backlinksSection.style.display = 'none';
     }
 
     renderBrowser() {
@@ -531,7 +580,7 @@ class NoteMaker {
     selectNote(note) {
         this.currentNote = note;
         this.editor.value = note.content;
-        this.updatePreview();
+        this.updatePreview();  // also calls updateOutline + updateBacklinks
         this.updateStatusBar();
         this.setSaveStatus('saved');
         this.renderTagBar();
@@ -835,9 +884,95 @@ class NoteMaker {
     }
 
     updatePreview() {
-        const markdown = this.editor.value;
-        const html = marked.parse(markdown);
-        this.preview.innerHTML = html;
+        this._resetCheckboxIndex?.();
+        const html = marked.parse(this.editor.value);
+        // Post-process: convert [[Note Title]] and [[Title|Alias]] to wikilink spans
+        const processed = html.replace(/\[\[([^\]|]+?)(?:\|([^\]]+?))?\]\]/g, (_, target, alias) => {
+            const display = alias ? alias : target;
+            const exists = this.notes.some(n => n.title.toLowerCase() === target.trim().toLowerCase());
+            const cls = exists ? 'wikilink' : 'wikilink wikilink-missing';
+            return `<span class="${cls}" data-target="${target.trim()}">${display}</span>`;
+        });
+        this.preview.innerHTML = processed;
+        this.updateOutline();
+        this.updateBacklinks();
+    }
+
+    updateOutline() {
+        if (!this.outlinePanel || !this.outlineList) return;
+        const headings = [...this.preview.querySelectorAll('h1,h2,h3,h4,h5,h6')];
+        if (headings.length < 2) {
+            this.outlinePanel.style.display = 'none';
+            return;
+        }
+        this.outlinePanel.style.display = '';
+        this.outlineList.innerHTML = '';
+        headings.forEach(h => {
+            const level = parseInt(h.tagName[1], 10);
+            const el = document.createElement('div');
+            el.className = `outline-item outline-h${level}`;
+            el.textContent = h.textContent;
+            el.title = h.textContent;
+            el.addEventListener('click', () => h.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+            this.outlineList.appendChild(el);
+        });
+    }
+
+    updateBacklinks() {
+        if (!this.backlinksSection || !this.backlinksList || !this.currentNote) return;
+        const title = this.currentNote.title;
+        const escaped = title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const pattern = new RegExp(`\\[\\[${escaped}(?:\\|[^\\]]+)?\\]\\]`, 'i');
+        const linkers = this.notes.filter(n => n.id !== this.currentNote.id && pattern.test(n.content));
+        if (linkers.length === 0) {
+            this.backlinksSection.style.display = 'none';
+            return;
+        }
+        this.backlinksSection.style.display = '';
+        this.backlinksList.innerHTML = '';
+        linkers.forEach(n => {
+            const el = document.createElement('div');
+            el.className = 'backlink-item';
+            el.textContent = n.title;
+            el.addEventListener('click', () => this.selectNoteWithAnimation(n));
+            this.backlinksList.appendChild(el);
+        });
+    }
+
+    toggleCheckbox(idx) {
+        let count = 0;
+        const updated = this.editor.value.replace(/^(\s*[-*+] )\[([ x])\]/gm, (match, prefix, state) => {
+            if (count++ === idx) {
+                return `${prefix}[${state === ' ' ? 'x' : ' '}]`;
+            }
+            return match;
+        });
+        if (updated !== this.editor.value) {
+            this.editor.value = updated;
+            this.updatePreview();
+            this.updateStatusBar();
+            this.setSaveStatus('unsaved');
+            this.autoSave();
+        }
+    }
+
+    async navigateToWikilink(title) {
+        const note = this.notes.find(n => n.title.toLowerCase() === title.toLowerCase());
+        if (note) {
+            this.selectNoteWithAnimation(note);
+        } else {
+            const create = await tauriAsk(`"${title}" doesn't exist yet. Create it?`);
+            if (create) {
+                this.createNewNote();
+                await new Promise(r => setTimeout(r, 200)); // wait for animation
+                this.editor.value = `# ${title}\n\n`;
+                if (this.currentNote) this.currentNote.title = title;
+                this.updatePreview();
+                this.updateStatusBar();
+                await this.saveCurrentNote();
+                this.renderNotesList();
+            }
+        }
     }
 
     // ===== Tags =====
