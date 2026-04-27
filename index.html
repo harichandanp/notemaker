@@ -74,6 +74,13 @@
                     </button>
                 </div>
                 <div id="folders-list" class="browser-list"></div>
+                <div id="tags-section" class="tags-filter-section" style="display:none;">
+                    <div class="tags-filter-header">
+                        <span class="tags-filter-label">Tags</span>
+                        <button id="clear-tag-filter" class="clear-tag-btn" style="display:none;">Clear</button>
+                    </div>
+                    <div id="tags-filter-list" class="tags-filter-list"></div>
+                </div>
                 <div class="notes-section">
                     <div class="notes-header">
                         <h3>Notes</h3>
@@ -85,6 +92,10 @@
 
             <main class="editor-container">
                 <div class="editor-pane">
+                    <div id="tag-bar" class="tag-bar">
+                        <div id="tag-chips" class="tag-chips"></div>
+                        <input type="text" id="tag-input" class="tag-input" placeholder="Add tag…" />
+                    </div>
                     <textarea id="editor" placeholder="Start typing in markdown..."></textarea>
                 </div>
                 <div class="preview-pane">

@@ -10,6 +10,8 @@ pub struct Note {
     pub title: String,
     pub content: String,
     pub folder: Option<String>, // Relative folder path
+    #[serde(default)]
+    pub tags: Vec<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
